@@ -1,44 +1,35 @@
-/** Aspect Ratio PS, version 1.1.1
-by Fubax 2019 for ReShade
+/** Aspect Ratio PS, version 1.2(pixel art ed.)
+original code by Fubax 2019 for ReShade
+optimised for pixel art games by reddit.com/u/crt09 (2022)
 */
 
 #include "ReShadeUI.fxh"
 
 uniform float A < __UNIFORM_SLIDER_FLOAT1
-	ui_label = "Correct proportions";
-	ui_category = "Aspect ratio";
-	ui_min = -1.0; ui_max = 1.0;
+	ui_category = "Output";
+	ui_label = "Stretch";
+	ui_min = 1.0; ui_max = 4.0;
 > = 0.0;
 
-uniform float Zoom < __UNIFORM_SLIDER_FLOAT1
-	ui_label = "Scale image";
-	ui_category = "Aspect ratio";
-	ui_min = 1.0; ui_max = 1.5;
-> = 1.0;
+uniform float samplingShift < __UNIFORM_SLIDER_FLOAT1
+	ui_category = "Input"; 
+	ui_label = "Alignment";
+	ui_min = -0.0005; ui_max = 0.0005;
+> = 0.0001;
 
-uniform bool FitScreen < __UNIFORM_INPUT_BOOL1
-	ui_label = "Scale image to borders";
-	ui_category = "Borders";
-> = true;
+uniform int horizontalCells < __UNIFORM_SLIDER_FLOAT1
+	ui_category = "Input";
+	ui_label = "Horiz. Pixels";
+	ui_min = 320; ui_max = 1000;
+> = 320;
 
-uniform bool UseBackground < __UNIFORM_INPUT_BOOL1
-	ui_label = "Use background image";
-	ui_category = "Borders";
-> = true;
-
-uniform float4 Color < __UNIFORM_COLOR_FLOAT4
-	ui_label = "Background color";
-	ui_category = "Borders";
-> = float4(0.027, 0.027, 0.027, 0.17);
-
+//uniform bool isPixelArt
+//uinform int2 pixelGameRes
 #include "ReShade.fxh"
 
 	  //////////////
 	 /// SHADER ///
 	//////////////
-
-texture AspectBgTex < source = "AspectRatio.jpg"; > { Width = 1351; Height = 1013; };
-sampler AspectBgSampler { Texture = AspectBgTex; };
 
 float3 AspectRatioPS(float4 pos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target
 {
@@ -47,40 +38,33 @@ float3 AspectRatioPS(float4 pos : SV_Position, float2 texcoord : TEXCOORD) : SV_
 	// Center coordinates
 	float2 coord = texcoord-0.5;
 
-	// if (Zoom != 1.0) coord /= Zoom;
-	if (Zoom != 1.0) coord /= clamp(Zoom, 1.0, 1.5); // Anti-cheat
-
+	
 	// Squeeze horizontally
 	if (A<0)
 	{
-		coord.x *= abs(A)+1.0; // Apply distortion
+		coord.x *= abs(A); // Apply distortion
 
 		// Scale to borders
-		if (FitScreen) coord /= abs(A)+1.0;
-		else // Mask image borders
-			Mask = abs(coord.x)>0.5;
-	}
+		coord /= abs(A);
+			}
 	// Squeeze vertically
 	else if (A>0)
 	{
-		coord.y *= A+1.0; // Apply distortion
+		coord.y *= A; // Apply distortion
 
 		// Scale to borders
-		if (FitScreen) coord /= abs(A)+1.0;
-		else // Mask image borders
-			Mask = abs(coord.y)>0.5;
+		coord /= abs(A);
 	}
 
 	// Coordinates back to the corner
 	coord += 0.5;
 
+	//map horizontal coord sample to grid (if pixel game)
+	coord[0] = round(coord[0]*horizontalCells)/float(horizontalCells);
+ 	coord[0] += samplingShift;
+
 	// Sample display image and return
-	if (UseBackground && !FitScreen) // If borders are visible
-		return Mask?
-			lerp( tex2D(AspectBgSampler, texcoord).rgb, Color.rgb, Color.a ) :
-			tex2D(ReShade::BackBuffer, coord).rgb;
-	else
-		return Mask? Color.rgb : tex2D(ReShade::BackBuffer, coord).rgb;
+	return Mask? float4(0.027, 0.027, 0.027, 0.17).rgb : tex2D(ReShade::BackBuffer, coord).rgb;
 }
 
 
@@ -90,8 +74,8 @@ float3 AspectRatioPS(float4 pos : SV_Position, float2 texcoord : TEXCOORD) : SV_
 
 technique AspectRatioPS
 <
-	ui_label = "Aspect Ratio";
-	ui_tooltip = "Correct image aspect ratio";
+	ui_label = "Integer Horizontal Stretch";
+	ui_tooltip = "Stretch pixel art games horizontally without smearing (bilinear) for the purpose of aspect ratio correction of games dispalyed on CRT monitors outputting [highTVL]x240, allowing for a larger image than outputting raw 320x240";
 >
 {
 	pass
